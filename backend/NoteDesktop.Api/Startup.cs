@@ -1,0 +1,113 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using System.Text;
+using System.Threading.Tasks;
+using MediatR;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.HttpsPolicy;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Tokens;
+using NoteDesktop.Data;
+using NoteDesktop.Service.Folder;
+
+namespace NoteDesktop.Api
+{
+    public class Startup
+    {
+        public Startup(IConfiguration configuration)
+        {
+            Configuration = configuration;
+        }
+
+        public IConfiguration Configuration { get; }
+
+        // This method gets called by the runtime. Use this method to add services to the container.
+        public void ConfigureServices(IServiceCollection services)
+        {
+            services.AddControllers();
+
+            ConfigureAuthenticationSettings(services);
+            ConfigureCorsSettings(services);
+            ConfigureDataLayerDependencies(services);
+            ConfigureServiceLayerDependencies(services);
+        }
+
+        // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+        {
+            if (env.IsDevelopment())
+            {
+                app.UseDeveloperExceptionPage();
+            }
+
+            app.UseHttpsRedirection();
+            app.UseCors("CorsPolicy");
+
+            app.UseRouting();
+            app.UseAuthentication();
+
+            app.UseAuthorization();
+
+            app.UseEndpoints(endpoints =>
+            {
+                endpoints.MapControllers();
+            });
+        }
+
+        private void ConfigureAuthenticationSettings(IServiceCollection services)
+        {
+            // JWT Configurations
+            services.AddAuthentication(
+                    x =>
+                    {
+                        x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                        x.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+                    })
+                .AddJwtBearer(
+                    x =>
+                    {
+                        x.RequireHttpsMetadata = false;
+                        x.SaveToken = true;
+                        x.TokenValidationParameters = new TokenValidationParameters
+                        {
+                            ValidateIssuerSigningKey = true,
+                            IssuerSigningKey =
+                                new SymmetricSecurityKey(Encoding.UTF8.GetBytes("JWT-DEMO-ISSUER-KEY")),
+                            ValidateIssuer = false,
+                            ValidateAudience = false,
+                            ValidateLifetime = true
+                        };
+                    });
+        }
+        private void ConfigureCorsSettings(IServiceCollection services)
+        {
+            services.AddCors(o => o.AddPolicy("CorsPolicy", builder =>
+            {
+                builder
+                    .AllowAnyMethod()
+                    .AllowAnyHeader()
+                    .AllowAnyOrigin();
+            }));
+        }
+        private void ConfigureServiceLayerDependencies(IServiceCollection services)
+        {
+            // Service Layer Dependencies
+            services.AddScoped<IFolderService, FolderService>();
+
+            services.AddMediatR(typeof(GetUserFoldersDataRequest).GetTypeInfo().Assembly);
+        }
+        private void ConfigureDataLayerDependencies(IServiceCollection services)
+        {
+            services.AddSingleton<IApplicationSqlHelper>(s => new ApplicationSqlHelper(Configuration.GetConnectionString("Default"), ""));
+
+        }
+    }
+}
